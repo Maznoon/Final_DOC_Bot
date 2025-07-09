@@ -1,0 +1,4 @@
+python-telegram-bot[ext]>=20.0
+SQLAlchemy>=1.4
+# Add other dependencies here if needed, e.g., psycopg2-binary for PostgreSQL
+# or mysql-connector-python for MySQL
