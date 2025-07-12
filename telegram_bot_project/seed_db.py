@@ -4,23 +4,18 @@ from sqlalchemy.orm import sessionmaker
 
 # Adjust the import path if your config/models are structured differently
 # or if running this script from outside telegram_bot_project directory.
-try:
-    from config import DATABASE_URI
-    from models import Base, User, Doctor, DoctorSchedule, Appointment, Review, UserRole, AppointmentStatus
-    from database import db_session as Session # Use the scoped session or SessionLocal
-except ImportError:
-    print("Error: Could not import necessary modules. Make sure this script is run from a context where 'config.py', 'models.py', and 'database.py' are accessible.")
-    print("If running from parent directory, you might need to adjust PYTHONPATH or run as 'python -m telegram_bot_project.seed_db'")
-    exit(1)
+from config import DATABASE_URI
+from models import Base, User, Doctor, DoctorSchedule, Appointment, Review, UserRole, AppointmentStatus
+from database import db_session as Session # Use the scoped session or SessionLocal
 
 
 def seed_database():
     """Populates the database with sample data."""
 
     # Clear existing data (optional, use with caution)
-    # Base.metadata.drop_all(bind=Session.bind)
-    # Base.metadata.create_all(bind=Session.bind)
-    # print("Dropped and recreated all tables.")
+    Base.metadata.drop_all(bind=Session.bind)
+    Base.metadata.create_all(bind=Session.bind)
+    print("Dropped and recreated all tables.")
 
     # --- Create Users ---
     user1 = User(telegram_id=111111, username="patient_alice", first_name="Alice", role=UserRole.PATIENT)
@@ -28,8 +23,13 @@ def seed_database():
     user3_doc_smith = User(telegram_id=333333, username="doc_smith", first_name="John", last_name="Smith", role=UserRole.DOCTOR)
     user4_doc_jones = User(telegram_id=444444, username="doc_jones", first_name="Emily", last_name="Jones", role=UserRole.DOCTOR)
     user5_new = User(telegram_id=555555, username="new_user_sam", first_name=None) # Test name collection
+    user6_doc_asadian = User(telegram_id=666666, username="doc_asadian", first_name="sepehr", last_name="asadian", role=UserRole.DOCTOR)
+    user7_doc_amiri_fard_s = User(telegram_id=777777, username="doc_amiri_fard_s", first_name="shirin", last_name="amiri fard", role=UserRole.DOCTOR)
+    user8_doc_amirifard_s = User(telegram_id=888888, username="doc_amirifard_s", first_name="siavash", last_name="amirifard", role=UserRole.DOCTOR)
+    user9_doc_esfandiari = User(telegram_id=999999, username="doc_esfandiari", first_name="abbas", last_name="esfandiari", role=UserRole.DOCTOR)
+    user10_doc_koylee = User(telegram_id=101010, username="doc_koylee", first_name="henry", last_name="koylee", role=UserRole.DOCTOR)
 
-    Session.add_all([user1, user2, user3_doc_smith, user4_doc_jones, user5_new])
+    Session.add_all([user1, user2, user3_doc_smith, user4_doc_jones, user5_new, user6_doc_asadian, user7_doc_amiri_fard_s, user8_doc_amirifard_s, user9_doc_esfandiari, user10_doc_koylee])
     Session.commit() # Commit users to get their IDs
 
     print(f"Created Users: {user1.id}, {user2.id}, {user3_doc_smith.id}, {user4_doc_jones.id}, {user5_new.id}")
@@ -38,8 +38,13 @@ def seed_database():
     # Ensure users exist and have IDs before creating doctors linked to them
     doctor_smith = Doctor(user_id=user3_doc_smith.id, specialty="Cardiology", bio="Experienced cardiologist focusing on heart health.")
     doctor_jones = Doctor(user_id=user4_doc_jones.id, specialty="Pediatrics", bio="Dedicated pediatrician providing care for children of all ages.")
+    doctor_asadian = Doctor(user_id=user6_doc_asadian.id, specialty="General Practitioner", bio="Dr. Asadian is a general practitioner.")
+    doctor_amiri_fard_s = Doctor(user_id=user7_doc_amiri_fard_s.id, specialty="Dermatologist", bio="Dr. Amiri Fard is a dermatologist.")
+    doctor_amirifard_s = Doctor(user_id=user8_doc_amirifard_s.id, specialty="Orthopedist", bio="Dr. Amirifard is an orthopedist.")
+    doctor_esfandiari = Doctor(user_id=user9_doc_esfandiari.id, specialty="Neurologist", bio="Dr. Esfandiari is a neurologist.")
+    doctor_koylee = Doctor(user_id=user10_doc_koylee.id, specialty="Ophthalmologist", bio="Dr. Koylee is an ophthalmologist.")
 
-    Session.add_all([doctor_smith, doctor_jones])
+    Session.add_all([doctor_smith, doctor_jones, doctor_asadian, doctor_amiri_fard_s, doctor_amirifard_s, doctor_esfandiari, doctor_koylee])
     Session.commit() # Commit doctors to get their IDs
     print(f"Created Doctors: {doctor_smith.id} (for User {user3_doc_smith.id}), {doctor_jones.id} (for User {user4_doc_jones.id})")
 

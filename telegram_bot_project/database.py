@@ -2,8 +2,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy.ext.declarative import declarative_base
 
-from .config import DATABASE_URI # Use relative import if config is in the same package directory
-from .models import Base # Import Base from models.py
+from config import DATABASE_URI
+from models import Base
 
 # Create a database engine
 # The connect_args are specific to SQLite to allow shared cache and prevent issues with threads
