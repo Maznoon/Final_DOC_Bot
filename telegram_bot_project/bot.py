@@ -12,21 +12,32 @@ from telegram.ext import (
     ContextTypes,
 )
 
+import sys
+import os
+
+# Add the project root to the Python path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 # Assuming config.py, models.py, database.py are in the same directory or accessible in PYTHONPATH
 try:
+    from telegram_bot_project.config import TELEGRAM_BOT_TOKEN, DATABASE_URI
+    from telegram_bot_project.database import db_session, init_db
+    from telegram_bot_project.models import User, Doctor, DoctorSchedule, Appointment, Review, UserRole
+except ImportError:
+    # This block is for when running bot.py directly from within telegram_bot_project folder
     from config import TELEGRAM_BOT_TOKEN, DATABASE_URI
     from database import db_session, init_db
     from models import User, Doctor, DoctorSchedule, Appointment, Review, UserRole
-except ImportError:
-    # This block is for when running bot.py directly from within telegram_bot_project folder
-    from .config import TELEGRAM_BOT_TOKEN, DATABASE_URI
-    from .database import db_session, init_db
-    from .models import User, Doctor, DoctorSchedule, Appointment, Review, UserRole
 
 
 # Enable logging
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler("bot.log"),
+        logging.StreamHandler()
+    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -126,7 +137,7 @@ def is_telegram_id_doctor(telegram_id: int) -> bool:
 # --- Main Menu Keyboard ---
 def main_menu_keyboard(telegram_user_id: int) -> InlineKeyboardMarkup:
     keyboard = [
-        [InlineKeyboardButton("👨‍⚕️ View Doctors", callback_data="view_doctors")],
+        [InlineKeyboardButton("👨‍⚕️ View Specialties", callback_data="view_specialties")],
         [InlineKeyboardButton("🗓️ My Appointments", callback_data="my_appointments")],
         [InlineKeyboardButton("🌟 Doctor Reviews", callback_data="doctor_reviews")],
         [InlineKeyboardButton("❌ Cancel Appointment", callback_data="cancel_appointment_list")],
@@ -151,8 +162,9 @@ def doctors_list_keyboard(doctors: list[Doctor]) -> InlineKeyboardMarkup:
                 doc_name_parts.append(doc.user_account.last_name)
 
         doc_display_name = " ".join(doc_name_parts) if doc_name_parts else f"Doctor ID: {doc.id}"
-        keyboard.append([InlineKeyboardButton(f"Dr. {doc_display_name} - {doc.specialty}", callback_data=f"select_doctor_{doc.id}")])
-    keyboard.append([InlineKeyboardButton("⬅️ Back to Menu", callback_data="main_menu")])
+        specialty_names = [s.name for s in doc.specialties]
+        keyboard.append([InlineKeyboardButton(f"Dr. {doc_display_name} - {', '.join(specialty_names)}", callback_data=f"select_doctor_{doc.id}")])
+    keyboard.append([InlineKeyboardButton("⬅️ Back to Specialties", callback_data="view_specialties")])
     return InlineKeyboardMarkup(keyboard)
 
 def doctors_list_for_reviews_keyboard(doctors: list[Doctor]) -> InlineKeyboardMarkup:
@@ -194,7 +206,7 @@ def format_date_for_display(date_obj: datetime.date) -> str:
     """Formats a date object as 'Day, Mon DD' (e.g., 'Mon, Jul 29')."""
     return date_obj.strftime("%a, %b %d")
 
-def available_dates_keyboard(doctor_id: int, available_dates: list[datetime.date]) -> InlineKeyboardMarkup:
+def available_dates_keyboard(doctor_id: int, available_dates: list[datetime.date], specialty_id: int) -> InlineKeyboardMarkup:
     keyboard = []
     # Display dates nicely, e.g., "Mon, Jul 29"
     for date_obj in available_dates:
@@ -202,7 +214,7 @@ def available_dates_keyboard(doctor_id: int, available_dates: list[datetime.date
         callback_data_date = date_obj.strftime("%Y-%m-%d") # Use ISO format for callback data
         keyboard.append([InlineKeyboardButton(display_text, callback_data=f"select_date_{doctor_id}_{callback_data_date}")])
 
-    keyboard.append([InlineKeyboardButton("⬅️ Back to Doctors", callback_data="view_doctors")])
+    keyboard.append([InlineKeyboardButton("⬅️ Back to Doctors", callback_data=f"select_specialty_{specialty_id}")])
     keyboard.append([InlineKeyboardButton("⬅️ Back to Menu", callback_data="main_menu")])
     return InlineKeyboardMarkup(keyboard)
 
@@ -267,17 +279,49 @@ async def handle_name_input(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     return States.MAIN_MENU
 
 
+def specialties_list_keyboard(specialties: list[Specialty]) -> InlineKeyboardMarkup:
+    keyboard = []
+    for spec in specialties:
+        keyboard.append([InlineKeyboardButton(spec.name, callback_data=f"select_specialty_{spec.id}")])
+    keyboard.append([InlineKeyboardButton("⬅️ Back to Menu", callback_data="main_menu")])
+    return InlineKeyboardMarkup(keyboard)
+
+async def view_specialties_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handles the 'View Specialties' button click."""
+    query = update.callback_query
+    await query.answer() # Acknowledge callback
+    try:
+        specialties = db_session.query(Specialty).all()
+        if not specialties:
+            await query.edit_message_text(
+                text="Currently, there are no specialties registered. Please check back later.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back to Menu", callback_data="main_menu")]])
+            )
+        else:
+            await query.edit_message_text(
+                text="Please select a specialty:",
+                reply_markup=specialties_list_keyboard(specialties)
+            )
+        return States.SELECTING_DOCTOR
+    except Exception as e:
+        logger.error(f"Error in view_specialties_callback: {e}")
+        if query.message: # Ensure there's a message to edit
+            await query.edit_message_text("Sorry, an error occurred while fetching specialties. Please try again later.",
+                                      reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back to Menu", callback_data="main_menu")]]))
+        return States.MAIN_MENU
+
 async def view_doctors_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handles the 'View Doctors' button click."""
     query = update.callback_query
     await query.answer() # Acknowledge callback
     try:
-        doctors = db_session.query(Doctor).join(User, Doctor.user_id == User.id).all() # Join with User to access names
-
+        specialty_id = int(query.data.split("_")[-1])
+        doctors = db_session.query(Doctor).join(Doctor.specialties).filter(Specialty.id == specialty_id).all()
+        logger.info(f"Found {len(doctors)} doctors in the database for specialty {specialty_id}.")
         if not doctors:
             await query.edit_message_text(
-                text="Currently, there are no doctors registered. Please check back later.",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back to Menu", callback_data="main_menu")]])
+                text="Currently, there are no doctors registered for this specialty. Please check back later.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back to Specialties", callback_data="view_specialties")]])
             )
         else:
             await query.edit_message_text(
@@ -305,6 +349,7 @@ async def select_doctor_callback(update: Update, context: ContextTypes.DEFAULT_T
             raise ValueError("Doctor ID is not a number")
         doctor_id = int(doctor_id_str)
         context.user_data['selected_doctor_id'] = doctor_id
+        context.user_data['selected_specialty_id'] = context.user_data.get('selected_specialty_id')
 
         doctor = db_session.query(Doctor).filter(Doctor.id == doctor_id).first()
         if not doctor:
@@ -328,7 +373,7 @@ async def select_doctor_callback(update: Update, context: ContextTypes.DEFAULT_T
                 DoctorSchedule.is_booked == 0
             ).distinct().order_by(sql_func.date(DoctorSchedule.available_date)).all()
 
-        available_dates = [result[0] for result in available_schedule_dates]
+        available_dates = [datetime.datetime.strptime(result[0], '%Y-%m-%d').date() for result in available_schedule_dates]
 
         doc_name_parts = []
         if doctor.user_account:
@@ -337,17 +382,19 @@ async def select_doctor_callback(update: Update, context: ContextTypes.DEFAULT_T
             if doctor.user_account.last_name:
                 doc_name_parts.append(doctor.user_account.last_name)
         doc_display_name = " ".join(doc_name_parts) if doc_name_parts else f"Doctor ID: {doctor.id}"
-        specialty = doctor.specialty or 'N/A'
+        specialty_names = [s.name for s in doctor.specialties]
+        specialty = ", ".join(specialty_names)
+
 
         if not available_dates:
             await query.edit_message_text(
                 text=f"Dr. {doc_display_name} ({specialty}) has no available dates in the next 7 days.",
-                reply_markup=available_dates_keyboard(doctor_id, [])
+                reply_markup=available_dates_keyboard(doctor_id, [], context.user_data.get('selected_specialty_id'))
             )
         else:
             await query.edit_message_text(
                 text=f"Available dates for Dr. {doc_display_name} ({specialty}):",
-                reply_markup=available_dates_keyboard(doctor_id, available_dates)
+                reply_markup=available_dates_keyboard(doctor_id, available_dates, context.user_data.get('selected_specialty_id'))
             )
 
         logger.info(f"User {update.effective_user.id} selected doctor {doctor_id}. Showing dates. State: SELECTING_DATE")
@@ -407,7 +454,7 @@ async def select_date_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
         keyboard = [
             [InlineKeyboardButton("⬅️ Change Date (Show Dr. Dates)", callback_data=f"select_doctor_{doctor_id}")],
-            [InlineKeyboardButton("⬅️ Change Doctor", callback_data="view_doctors")],
+            [InlineKeyboardButton("⬅️ Change Doctor", callback_data=f"select_specialty_{context.user_data.get('selected_specialty_id')}")],
             [InlineKeyboardButton("🏠 Back to Main Menu", callback_data="main_menu")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -672,6 +719,20 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.effective_message.reply_text("Sorry, something went wrong. Please try again later.")
 
 
+async def start_again_from_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    telegram_user = update.effective_user
+    # Ensure user exists, though they should if they reached here via a button
+    db_user = get_user(telegram_id=telegram_user.id, username=telegram_user.username, first_name=telegram_user.first_name, last_name=telegram_user.last_name)
+    context.user_data['db_user_id'] = db_user.id # Ensure db_user_id is in context
+
+    await query.edit_message_text(
+        text=f"Welcome back, {telegram_user.first_name}!\nHow can I help you today?",
+        reply_markup=main_menu_keyboard(telegram_user.id)
+    )
+    return States.MAIN_MENU
+
 def main() -> None:
     """Run the bot."""
     # Initialize DB
@@ -686,7 +747,7 @@ def main() -> None:
         entry_points=[CommandHandler("start", start)],
         states={
             States.MAIN_MENU: [
-                CallbackQueryHandler(view_doctors_callback, pattern="^view_doctors$"),
+                CallbackQueryHandler(view_specialties_callback, pattern="^view_specialties$"),
                 CallbackQueryHandler(my_appointments_callback, pattern="^my_appointments$"),
                 CallbackQueryHandler(doctor_reviews_select_doctor_callback, pattern="^doctor_reviews$"),
                 CallbackQueryHandler(list_appointments_for_cancellation_callback, pattern="^cancel_appointment_list$"),
@@ -694,12 +755,13 @@ def main() -> None:
                 CallbackQueryHandler(start_again_from_menu, pattern="^main_menu$"),
             ],
             States.SELECTING_DOCTOR: [
+                CallbackQueryHandler(view_doctors_callback, pattern="^select_specialty_\\d+$"),
                 CallbackQueryHandler(select_doctor_callback, pattern="^select_doctor_\\d+$"),
                 CallbackQueryHandler(start_again_from_menu, pattern="^main_menu$"),
             ],
             States.SELECTING_DATE: [
                 CallbackQueryHandler(select_date_callback, pattern="^select_date_\\d+_\\d{4}-\\d{2}-\\d{2}$"),
-                CallbackQueryHandler(view_doctors_callback, pattern="^view_doctors$"),
+                CallbackQueryHandler(view_specialties_callback, pattern="^view_specialties$"),
                 CallbackQueryHandler(start_again_from_menu, pattern="^main_menu$"),
                 CallbackQueryHandler(select_doctor_callback, pattern="^select_doctor_\\d+$"),
             ],
@@ -730,21 +792,6 @@ def main() -> None:
         fallbacks=[CommandHandler("start", start), CallbackQueryHandler(start_again_from_menu, pattern="^main_menu$")],
         # per_user=True, per_chat=True # Default, good for most cases
     )
-
-    # A simple way to restart the main menu from a callback
-    async def start_again_from_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        query = update.callback_query
-        await query.answer()
-        telegram_user = update.effective_user
-        # Ensure user exists, though they should if they reached here via a button
-        db_user = get_user(telegram_id=telegram_user.id, username=telegram_user.username, first_name=telegram_user.first_name, last_name=telegram_user.last_name)
-        context.user_data['db_user_id'] = db_user.id # Ensure db_user_id is in context
-
-        await query.edit_message_text(
-            text=f"Welcome back, {telegram_user.first_name}!\nHow can I help you today?",
-            reply_markup=main_menu_keyboard(telegram_user.id)
-        )
-        return States.MAIN_MENU
 
     application.add_handler(conv_handler) # Use the conversation handler
 

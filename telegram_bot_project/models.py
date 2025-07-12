@@ -28,12 +28,25 @@ class User(Base):
     doctor_profile = relationship("Doctor", uselist=False, back_populates="user_account")
 
 
+class Specialty(Base):
+    __tablename__ = "specialties"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, nullable=False)
+
+    doctors = relationship("Doctor", secondary="doctor_specialties", back_populates="specialties")
+
+class DoctorSpecialty(Base):
+    __tablename__ = "doctor_specialties"
+    doctor_id = Column(Integer, ForeignKey("doctors.id"), primary_key=True)
+    specialty_id = Column(Integer, ForeignKey("specialties.id"), primary_key=True)
+
+
 class Doctor(Base):
     __tablename__ = "doctors"
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False) # Link to the User table
-    specialty = Column(String, nullable=False)
     bio = Column(String, nullable=True) # A short bio or description
     # Add other doctor-specific fields if needed, e.g., consultation_fee
 
@@ -41,9 +54,11 @@ class Doctor(Base):
     schedules = relationship("DoctorSchedule", back_populates="doctor")
     appointments = relationship("Appointment", back_populates="doctor")
     reviews_received = relationship("Review", back_populates="doctor")
+    specialties = relationship("Specialty", secondary="doctor_specialties", back_populates="doctors")
+
 
     def __repr__(self):
-        return f"<Doctor(id={self.id}, user_id={self.user_id}, specialty='{self.specialty}')>"
+        return f"<Doctor(id={self.id}, user_id={self.user_id})>"
 
 class DoctorSchedule(Base):
     __tablename__ = "doctor_schedules"
