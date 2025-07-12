@@ -1,47 +1,60 @@
 import datetime
+import sys
+import os
+
+# Add the project root to the Python path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 # Adjust the import path if your config/models are structured differently
 # or if running this script from outside telegram_bot_project directory.
 try:
-    from config import DATABASE_URI
-    from models import Base, User, Doctor, DoctorSchedule, Appointment, Review, UserRole, AppointmentStatus
-    from database import db_session as Session # Use the scoped session or SessionLocal
-except ImportError:
-    print("Error: Could not import necessary modules. Make sure this script is run from a context where 'config.py', 'models.py', and 'database.py' are accessible.")
+    from telegram_bot_project.config import DATABASE_URI
+    from telegram_bot_project.models import Base, User, Doctor, DoctorSchedule, Appointment, Review, UserRole, AppointmentStatus
+    from telegram_bot_project.database import db_session as Session, init_db # Use the scoped session or SessionLocal
+except ImportError as e:
+    print(f"Error: Could not import necessary modules. {e}")
     print("If running from parent directory, you might need to adjust PYTHONPATH or run as 'python -m telegram_bot_project.seed_db'")
     exit(1)
 
 
 def seed_database():
     """Populates the database with sample data."""
-
+    init_db()
     # Clear existing data (optional, use with caution)
-    # Base.metadata.drop_all(bind=Session.bind)
-    # Base.metadata.create_all(bind=Session.bind)
-    # print("Dropped and recreated all tables.")
+    Base.metadata.drop_all(bind=Session.bind)
+    Base.metadata.create_all(bind=Session.bind)
+    print("Dropped and recreated all tables.")
 
     # --- Create Users ---
     user1 = User(telegram_id=111111, username="patient_alice", first_name="Alice", role=UserRole.PATIENT)
     user2 = User(telegram_id=222222, username="patient_bob", first_name="Bob", role=UserRole.PATIENT)
     user3_doc_smith = User(telegram_id=333333, username="doc_smith", first_name="John", last_name="Smith", role=UserRole.DOCTOR)
     user4_doc_jones = User(telegram_id=444444, username="doc_jones", first_name="Emily", last_name="Jones", role=UserRole.DOCTOR)
-    user5_new = User(telegram_id=555555, username="new_user_sam", first_name=None) # Test name collection
+    user5_doc_asadian = User(telegram_id=555555, username="doc_asadian", first_name="Sepehr", last_name="Asadian", role=UserRole.DOCTOR)
+    user6_doc_fard = User(telegram_id=666666, username="doc_fard", first_name="Shirin", last_name="Amiri Fard", role=UserRole.DOCTOR)
+    user7_doc_koyle = User(telegram_id=777777, username="doc_koyle", first_name="Henry", last_name="Koyle", role=UserRole.DOCTOR)
 
-    Session.add_all([user1, user2, user3_doc_smith, user4_doc_jones, user5_new])
+
+    Session.add_all([user1, user2, user3_doc_smith, user4_doc_jones, user5_doc_asadian, user6_doc_fard, user7_doc_koyle])
     Session.commit() # Commit users to get their IDs
 
-    print(f"Created Users: {user1.id}, {user2.id}, {user3_doc_smith.id}, {user4_doc_jones.id}, {user5_new.id}")
+    print(f"Created Users: {user1.id}, {user2.id}, {user3_doc_smith.id}, {user4_doc_jones.id}, {user5_doc_asadian.id}, {user6_doc_fard.id}, {user7_doc_koyle.id}")
 
     # --- Create Doctors ---
     # Ensure users exist and have IDs before creating doctors linked to them
     doctor_smith = Doctor(user_id=user3_doc_smith.id, specialty="Cardiology", bio="Experienced cardiologist focusing on heart health.")
     doctor_jones = Doctor(user_id=user4_doc_jones.id, specialty="Pediatrics", bio="Dedicated pediatrician providing care for children of all ages.")
+    doctor_asadian = Doctor(user_id=user5_doc_asadian.id, specialty="General Practitioner", bio="A compassionate general practitioner.")
+    doctor_fard = Doctor(user_id=user6_doc_fard.id, specialty="Dermatology", bio="Specialist in skin health and cosmetic dermatology.")
+    doctor_koyle = Doctor(user_id=user7_doc_koyle.id, specialty="Orthopedics", bio="Expert in musculoskeletal injuries and conditions.")
 
-    Session.add_all([doctor_smith, doctor_jones])
+
+    Session.add_all([doctor_smith, doctor_jones, doctor_asadian, doctor_fard, doctor_koyle])
     Session.commit() # Commit doctors to get their IDs
-    print(f"Created Doctors: {doctor_smith.id} (for User {user3_doc_smith.id}), {doctor_jones.id} (for User {user4_doc_jones.id})")
+    print(f"Created Doctors: {doctor_smith.id} (for User {user3_doc_smith.id}), {doctor_jones.id} (for User {user4_doc_jones.id}), {doctor_asadian.id} (for User {user5_doc_asadian.id}), {doctor_fard.id} (for User {user6_doc_fard.id}), {doctor_koyle.id} (for User {user7_doc_koyle.id})")
 
 
     # --- Create Doctor Schedules ---
@@ -141,7 +154,9 @@ def seed_database():
     print(f"  Patient Bob:   {user2.telegram_id} (has an appointment, has given reviews)")
     print(f"  Dr. Smith:     {user3_doc_smith.telegram_id} (is a Doctor)")
     print(f"  Dr. Jones:     {user4_doc_jones.telegram_id} (is a Doctor)")
-    print(f"  New User Sam:  {user5_new.telegram_id} (will be prompted for name)")
+    print(f"  Dr. Asadian:   {user5_doc_asadian.telegram_id} (is a Doctor)")
+    print(f"  Dr. Fard:      {user6_doc_fard.telegram_id} (is a Doctor)")
+    print(f"  Dr. Koyle:     {user7_doc_koyle.telegram_id} (is a Doctor)")
 
 
 if __name__ == "__main__":
