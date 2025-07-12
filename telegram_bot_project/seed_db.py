@@ -12,7 +12,7 @@ from sqlalchemy.orm import sessionmaker
 # or if running this script from outside telegram_bot_project directory.
 try:
     from telegram_bot_project.config import DATABASE_URI
-    from telegram_bot_project.models import Base, User, Doctor, DoctorSchedule, Appointment, Review, UserRole, AppointmentStatus
+    from telegram_bot_project.models import Base, User, Doctor, DoctorSchedule, Appointment, Review, UserRole, AppointmentStatus, Specialty, DoctorSpecialty
     from telegram_bot_project.database import db_session as Session, init_db # Use the scoped session or SessionLocal
 except ImportError as e:
     print(f"Error: Could not import necessary modules. {e}")
@@ -43,17 +43,37 @@ def seed_database():
 
     print(f"Created Users: {user1.id}, {user2.id}, {user3_doc_smith.id}, {user4_doc_jones.id}, {user5_doc_asadian.id}, {user6_doc_fard.id}, {user7_doc_koyle.id}")
 
+    # --- Create Specialties ---
+    specialty_cardiology = Specialty(name="Cardiology")
+    specialty_pediatrics = Specialty(name="Pediatrics")
+    specialty_gp = Specialty(name="General Practitioner")
+    specialty_dermatology = Specialty(name="Dermatology")
+    specialty_orthopedics = Specialty(name="Orthopedics")
+
+    Session.add_all([specialty_cardiology, specialty_pediatrics, specialty_gp, specialty_dermatology, specialty_orthopedics])
+    Session.commit()
+
     # --- Create Doctors ---
     # Ensure users exist and have IDs before creating doctors linked to them
-    doctor_smith = Doctor(user_id=user3_doc_smith.id, specialty="Cardiology", bio="Experienced cardiologist focusing on heart health.")
-    doctor_jones = Doctor(user_id=user4_doc_jones.id, specialty="Pediatrics", bio="Dedicated pediatrician providing care for children of all ages.")
-    doctor_asadian = Doctor(user_id=user5_doc_asadian.id, specialty="General Practitioner", bio="A compassionate general practitioner.")
-    doctor_fard = Doctor(user_id=user6_doc_fard.id, specialty="Dermatology", bio="Specialist in skin health and cosmetic dermatology.")
-    doctor_koyle = Doctor(user_id=user7_doc_koyle.id, specialty="Orthopedics", bio="Expert in musculoskeletal injuries and conditions.")
+    doctor_smith = Doctor(user_id=user3_doc_smith.id, bio="Experienced cardiologist focusing on heart health.")
+    doctor_jones = Doctor(user_id=user4_doc_jones.id, bio="Dedicated pediatrician providing care for children of all ages.")
+    doctor_asadian = Doctor(user_id=user5_doc_asadian.id, bio="A compassionate general practitioner.")
+    doctor_fard = Doctor(user_id=user6_doc_fard.id, bio="Specialist in skin health and cosmetic dermatology.")
+    doctor_koyle = Doctor(user_id=user7_doc_koyle.id, bio="Expert in musculoskeletal injuries and conditions.")
 
 
     Session.add_all([doctor_smith, doctor_jones, doctor_asadian, doctor_fard, doctor_koyle])
     Session.commit() # Commit doctors to get their IDs
+
+    # --- Link Doctors to Specialties ---
+    doctor_smith.specialties.append(specialty_cardiology)
+    doctor_jones.specialties.append(specialty_pediatrics)
+    doctor_asadian.specialties.append(specialty_gp)
+    doctor_fard.specialties.append(specialty_dermatology)
+    doctor_koyle.specialties.append(specialty_orthopedics)
+
+    Session.commit()
+
     print(f"Created Doctors: {doctor_smith.id} (for User {user3_doc_smith.id}), {doctor_jones.id} (for User {user4_doc_jones.id}), {doctor_asadian.id} (for User {user5_doc_asadian.id}), {doctor_fard.id} (for User {user6_doc_fard.id}), {doctor_koyle.id} (for User {user7_doc_koyle.id})")
 
 
