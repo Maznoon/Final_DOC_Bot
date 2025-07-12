@@ -12,21 +12,32 @@ from telegram.ext import (
     ContextTypes,
 )
 
+import sys
+import os
+
+# Add the project root to the Python path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 # Assuming config.py, models.py, database.py are in the same directory or accessible in PYTHONPATH
 try:
+    from telegram_bot_project.config import TELEGRAM_BOT_TOKEN, DATABASE_URI
+    from telegram_bot_project.database import db_session, init_db
+    from telegram_bot_project.models import User, Doctor, DoctorSchedule, Appointment, Review, UserRole
+except ImportError:
+    # This block is for when running bot.py directly from within telegram_bot_project folder
     from config import TELEGRAM_BOT_TOKEN, DATABASE_URI
     from database import db_session, init_db
     from models import User, Doctor, DoctorSchedule, Appointment, Review, UserRole
-except ImportError:
-    # This block is for when running bot.py directly from within telegram_bot_project folder
-    from .config import TELEGRAM_BOT_TOKEN, DATABASE_URI
-    from .database import db_session, init_db
-    from .models import User, Doctor, DoctorSchedule, Appointment, Review, UserRole
 
 
 # Enable logging
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler("bot.log"),
+        logging.StreamHandler()
+    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -273,7 +284,7 @@ async def view_doctors_callback(update: Update, context: ContextTypes.DEFAULT_TY
     await query.answer() # Acknowledge callback
     try:
         doctors = db_session.query(Doctor).join(User, Doctor.user_id == User.id).all() # Join with User to access names
-
+        logger.info(f"Found {len(doctors)} doctors in the database.")
         if not doctors:
             await query.edit_message_text(
                 text="Currently, there are no doctors registered. Please check back later.",
@@ -672,6 +683,20 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.effective_message.reply_text("Sorry, something went wrong. Please try again later.")
 
 
+async def start_again_from_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    telegram_user = update.effective_user
+    # Ensure user exists, though they should if they reached here via a button
+    db_user = get_user(telegram_id=telegram_user.id, username=telegram_user.username, first_name=telegram_user.first_name, last_name=telegram_user.last_name)
+    context.user_data['db_user_id'] = db_user.id # Ensure db_user_id is in context
+
+    await query.edit_message_text(
+        text=f"Welcome back, {telegram_user.first_name}!\nHow can I help you today?",
+        reply_markup=main_menu_keyboard(telegram_user.id)
+    )
+    return States.MAIN_MENU
+
 def main() -> None:
     """Run the bot."""
     # Initialize DB
@@ -730,21 +755,6 @@ def main() -> None:
         fallbacks=[CommandHandler("start", start), CallbackQueryHandler(start_again_from_menu, pattern="^main_menu$")],
         # per_user=True, per_chat=True # Default, good for most cases
     )
-
-    # A simple way to restart the main menu from a callback
-    async def start_again_from_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        query = update.callback_query
-        await query.answer()
-        telegram_user = update.effective_user
-        # Ensure user exists, though they should if they reached here via a button
-        db_user = get_user(telegram_id=telegram_user.id, username=telegram_user.username, first_name=telegram_user.first_name, last_name=telegram_user.last_name)
-        context.user_data['db_user_id'] = db_user.id # Ensure db_user_id is in context
-
-        await query.edit_message_text(
-            text=f"Welcome back, {telegram_user.first_name}!\nHow can I help you today?",
-            reply_markup=main_menu_keyboard(telegram_user.id)
-        )
-        return States.MAIN_MENU
 
     application.add_handler(conv_handler) # Use the conversation handler
 
