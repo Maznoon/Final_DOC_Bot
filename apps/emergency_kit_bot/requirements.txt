@@ -1,0 +1,9 @@
+aiogram>=3.0.0
+sqlalchemy[asyncio]>=2.0.0
+asyncpg
+python-dotenv
+pydantic-settings
+jinja2
+alembic
+psycopg2-binary
+cachetools
